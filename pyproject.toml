@@ -7,6 +7,7 @@ name = "stackfem"
 version = "0.1.0"
 description = "Mesh and solve the heat flow through a layered power module stack with Gmsh and CalculiX."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = ["gmsh>=4.11", "numpy>=1.24", "matplotlib>=3.7"]
 
