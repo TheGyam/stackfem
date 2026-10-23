@@ -1,5 +1,6 @@
-"""Read and check the parameter file."""
+"""Read, check and write the parameter file."""
 
+import json
 import tomllib
 
 
@@ -27,6 +28,13 @@ def check(p):
             raise ValueError(f"material '{name}' needs a positive conductivity")
     if p["load"]["source"] not in names:
         raise ValueError(f"the heat source '{p['load']['source']}' is not a layer")
+    number = (int, float)
+    if not isinstance(p["load"]["power"], number) or p["load"]["power"] <= 0:
+        raise ValueError("power must be a positive number")
+    if not isinstance(p["load"]["sink"], number):
+        raise ValueError("sink must be a temperature")
+    if "mechanics" in p and not isinstance(p["mechanics"]["stress_free"], number):
+        raise ValueError("stress_free must be a temperature")
     if p["load"].get("film", 1) <= 0:
         raise ValueError("film must be positive; leave it out for a fixed temperature")
     if "mechanics" in p:
@@ -55,3 +63,34 @@ def layer_heights(p):
         out.append((z, z + layer["thickness"]))
         z += layer["thickness"]
     return out
+
+
+def dumps(p):
+    """Parameters as TOML text. Covers what parameter files use: numbers, strings,
+    lists, tables and arrays of tables. Comments in the original file are not kept."""
+
+    def value(v):
+        if isinstance(v, bool):
+            return str(v).lower()
+        if isinstance(v, str):
+            return json.dumps(v)  # a JSON string is a valid TOML basic string
+        if isinstance(v, list):
+            return "[" + ", ".join(map(value, v)) + "]"
+        return repr(v)
+
+    def is_tables(v):
+        return isinstance(v, list) and v and all(isinstance(x, dict) for x in v)
+
+    def table(prefix, d):
+        lines = [f"{k} = {value(v)}" for k, v in d.items()
+                 if not isinstance(v, dict) and not is_tables(v)]
+        for k, v in d.items():
+            name = f"{prefix}.{k}" if prefix else k
+            if isinstance(v, dict):
+                lines += ["", f"[{name}]"] + table(name, v)
+            elif is_tables(v):
+                for item in v:
+                    lines += ["", f"[[{name}]]"] + table(name, item)
+        return lines
+
+    return "\n".join(table("", p)).strip() + "\n"

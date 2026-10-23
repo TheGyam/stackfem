@@ -17,6 +17,7 @@ src/stackfem/
   study.py              Run one level or all of them; the summary CSV
   post.py               Extrapolation, probing the solution, the plots
   cli.py                The `stackfem` command
+  gui.py                The `stackfem-gui` window (PySide6, optional)
 tests/                pytest. Small meshes only, so the suite runs in seconds.
 docs/                 Images used by the README.
 results/              Output. Not tracked by git.
@@ -44,8 +45,13 @@ Gmsh, and only `solver.py` and `stress.py` know CalculiX's file formats.
    returning, so no caller can skip it. A failing mesh raises `QualityError`.
 3. **Post-processing reads files, not memory.** `post.py` works from a results
    folder alone, so plots can be redone without solving again.
-4. **Units are mm, W and °C everywhere.** Conductivity is entered in W/(m K);
-   `solver.py` is the one place that converts to the deck's mm and mW.
+4. **The window holds no model logic.** It turns the form into parameters,
+   checks them with `params.check`, and runs `stackfem study` as a separate
+   process. Anything the window can do, the command line can do too.
+5. **Units are mm, W and °C everywhere.** Conductivity is entered in W/(m K),
+   the film coefficient in W/(m² K), stiffness in GPa and expansion in ppm/K.
+   Only the deck writers in `solver.py` and `stress.py` convert, to the decks'
+   mm, mW, N and MPa.
 
 ## Things worth knowing
 

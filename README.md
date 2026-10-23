@@ -53,6 +53,24 @@ stackfem post params/module.toml       # redo the report and plots from saved re
 `mesh` and `run` take `--level n`. Every command takes `--out folder`; by default
 results go to `results/<name>/`.
 
+### The window
+
+```bash
+pip install -e ".[gui]"
+stackfem-gui                           # opens params/module.toml
+stackfem-gui my_stack.toml
+```
+
+A form on the left holds every parameter: the layers and materials as tables,
+then the load, cooling, mesh, study and stress settings. **Run** checks the form,
+writes it to `results/<name>/form.toml` and runs the study there, with its output
+streaming into the log. When it finishes, the tabs show the convergence, profile,
+die-top and stress plots. **Open…** and **Save as…** read and write parameter files;
+a saved file keeps every value but not the comments. Set *Levels* to 1 for a quick
+baseline run.
+
+![The StackFEM window](docs/gui.png)
+
 ## The parameter file
 
 [params/module.toml](params/module.toml) holds everything: each layer's material,
@@ -139,6 +157,8 @@ element is inverted, node order matches CalculiX), the quality gate, the
 extrapolation, and full CalculiX runs against answers worked out by hand: a
 three-layer slab with a fixed bottom and with convection, and a slab of one
 material heated evenly, which must grow without stress under both supports. The
-solver tests are skipped when `ccx` is not installed.
+window's tests check that the form shows a file unchanged and that edits and bad
+values reach the parameters. Solver tests are skipped without `ccx`, and window
+tests without PySide6.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how the code is laid out.

@@ -1,4 +1,5 @@
 import copy
+import tomllib
 
 import pytest
 
@@ -43,3 +44,7 @@ def test_mechanics_is_optional(module):
     for material in p["material"].values():
         del material["expansion"]
     params.check(p)
+
+
+def test_written_file_reads_back_the_same(module):
+    assert tomllib.loads(params.dumps(module)) == module
