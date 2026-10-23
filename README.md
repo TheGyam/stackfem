@@ -161,8 +161,9 @@ stackfem-gui my_stack.toml      # opens another parameter file
 5. **Save as…** writes the form to a parameter file; **Open…** loads one. A saved
    file keeps every value but not the comments.
 
-Closing the window during a run asks first, then stops the study. A CalculiX solve
-that has already started finishes on its own.
+Closing the window during a run asks first, then stops the study and the CalculiX
+solve it is running. (On macOS, a solve already under way still finishes on its
+own.)
 
 ## The command line
 

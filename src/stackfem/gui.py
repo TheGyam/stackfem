@@ -5,6 +5,10 @@ responsive and shows its output as it comes. Start with `stackfem-gui [file]`.
 """
 
 import copy
+import os
+import shutil
+import signal
+import subprocess
 import sys
 from pathlib import Path
 
@@ -49,6 +53,38 @@ CHOICES = [("mechanics", "support", "Support", ["flat", "free"]),
            ("mechanics", "solver", "Solver", ["direct", "iterative"])]
 PLOTS = [("Convergence", "convergence.png"), ("Profile", "profile.png"),
          ("Die top", "top.png"), ("Stress", "stress.png")]
+
+
+# On Linux, `setsid` starts the study as the leader of its own process group,
+# so stopping the group also stops the CalculiX solver it started.
+SETSID = shutil.which("setsid") if sys.platform.startswith("linux") else None
+
+
+def start(process, args):
+    """Start `python args` in `process`, so that `stop` can later end it with its children."""
+    if SETSID:
+        process.start(SETSID, [sys.executable, *args])
+    else:
+        process.start(sys.executable, args)
+
+
+def stop(process):
+    """End the process and everything it started, such as a running ccx.
+
+    Killing only the study would leave its CalculiX solve running on its own.
+    """
+    pid = process.processId()
+    if pid:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+        elif SETSID:
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            process.kill()  # ponytail: on macOS a ccx already started finishes on its own
+    process.waitForFinished(5000)
 
 
 def parse(text):
@@ -320,7 +356,7 @@ class Window(QMainWindow):
         self.process.setProcessChannelMode(QProcess.MergedChannels)
         self.process.readyReadStandardOutput.connect(self.read_output)
         self.process.finished.connect(self.finished)
-        self.process.start(sys.executable, ["-u", "-m", "stackfem.cli", "study", str(form_file), "--out", str(out)])
+        start(self.process, ["-u", "-m", "stackfem.cli", "study", str(form_file), "--out", str(out)])
 
     def read_output(self):
         text = bytes(self.process.readAllStandardOutput()).decode("utf-8", "replace")
@@ -357,7 +393,7 @@ class Window(QMainWindow):
             if answer != QMessageBox.Yes:
                 event.ignore()
                 return
-            self.process.kill()  # ponytail: a ccx already started finishes on its own
+            stop(self.process)
         event.accept()
 
 

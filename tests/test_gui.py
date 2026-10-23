@@ -77,3 +77,37 @@ def test_run_reports_each_step_and_finishes(app, slab, tmp_path, monkeypatch):
     assert w.statusBar().currentMessage() == ""
     assert (tmp_path / "results" / slab["name"] / "profile.png").exists()
     w.close()
+
+
+# A parent that starts a child, like the study starting ccx. The child keeps
+# writing the time to a file until it is killed.
+FAMILY = r"""
+import subprocess, sys, time
+beat = sys.argv[1]
+child = "import sys, time\nwhile True:\n    open(sys.argv[1], 'w').write(repr(time.time()))\n    time.sleep(0.1)"
+subprocess.Popen([sys.executable, "-c", child, beat])
+time.sleep(60)
+"""
+
+
+def test_closing_the_window_stops_what_the_study_started(window, tmp_path, monkeypatch):
+    import time
+    from PySide6.QtCore import QProcess
+    from PySide6.QtWidgets import QMessageBox
+
+    beat = tmp_path / "beat.txt"
+    window.process = QProcess(window)
+    gui.start(window.process, ["-c", FAMILY, str(beat)])
+    for _ in range(100):  # wait for the child to start beating
+        if beat.exists() and beat.read_text():
+            break
+        time.sleep(0.1)
+    assert beat.exists(), "the child process never started"
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.Yes)
+    window.close()
+    assert window.process.state() == QProcess.NotRunning
+    time.sleep(0.5)
+    last = beat.read_text()
+    time.sleep(1.0)
+    assert beat.read_text() == last, "the child kept running after the window closed"
