@@ -8,7 +8,7 @@ import copy
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QProcess, Qt
+from PySide6.QtCore import QElapsedTimer, QProcess, Qt, QTimer
 from PySide6.QtGui import QFontDatabase, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
@@ -95,6 +95,9 @@ class Window(QMainWindow):
         self.resize(1400, 900)
         self.process = None
         self.base, self.path = {}, Path(path)
+        self.clock = QElapsedTimer()
+        self.timer = QTimer(self, interval=1000)
+        self.timer.timeout.connect(self.tick)
 
         self.layers = self.table(LAYER_COLUMNS)
         self.materials = self.table(MATERIAL_COLUMNS)
@@ -300,9 +303,19 @@ class Window(QMainWindow):
         form_file.write_text(params.dumps(p), encoding="utf-8")
 
         self.log.clear()
+        self.log.appendPlainText(
+            f"Running {p['study']['levels']} level(s). Each level takes longer than the one before; "
+            "the full example study takes 20 to 30 minutes, most of it in the last stress solve.\n"
+            "The window is not frozen when this log goes quiet: CalculiX prints nothing while it "
+            "solves, which can take several minutes. The clock on the Run button shows it is "
+            "still working.\n")
+        self.statusBar().showMessage(
+            "Working. Quiet spells of several minutes during a solve are normal; the window is not frozen.")
         self.show_plots()  # don't leave an earlier run's plots up while this one runs
         self.run_button.setEnabled(False)
-        self.run_button.setText("Running…")
+        self.clock.start()
+        self.tick()
+        self.timer.start()
         self.process = QProcess(self)
         self.process.setProcessChannelMode(QProcess.MergedChannels)
         self.process.readyReadStandardOutput.connect(self.read_output)
@@ -315,11 +328,20 @@ class Window(QMainWindow):
         self.log.insertPlainText(text)
         self.log.ensureCursorVisible()
 
+    def tick(self):
+        """Show the time since Run on the button, so a long solve is visibly still going."""
+        minutes, seconds = divmod(self.clock.elapsed() // 1000, 60)
+        self.run_button.setText(f"Running… {minutes}:{seconds:02d}")
+
     def finished(self, code, _status):
         self.read_output()
+        self.timer.stop()
+        self.statusBar().clearMessage()
+        minutes, seconds = divmod(self.clock.elapsed() // 1000, 60)
         self.run_button.setEnabled(True)
         self.run_button.setText("Run")
-        self.log.appendPlainText("\nFinished." if code == 0 else f"\nStopped with an error (exit code {code}).")
+        self.log.appendPlainText(f"\nFinished in {minutes}:{seconds:02d}." if code == 0
+                                 else f"\nStopped with an error (exit code {code}).")
         self.show_plots()
         if code == 0:
             self.tabs.setCurrentIndex(0)

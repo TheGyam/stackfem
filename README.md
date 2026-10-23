@@ -148,7 +148,13 @@ stackfem-gui my_stack.toml      # opens another parameter file
    earlier results. Changing the name shows that folder's plots, if it has any.
 3. **Click Run.** The form is checked first, and a message names any value that is
    wrong. The study then runs in the background and its output streams into the
-   log at the bottom right.
+   log at the bottom right, with a line before each step. The Run button shows how
+   long the run has taken.
+
+   **Long quiet spells are normal.** CalculiX prints nothing while it solves, so the
+   log can stay still for 10 minutes or more, mostly during the stress solve on the
+   finest level. The window is not frozen: the clock on the Run button keeps
+   counting, and the status line at the bottom says the study is still working.
 4. **Read the results.** When the log says *Finished*, the tabs show the
    convergence, profile, die-top and stress plots. The numbers are in
    `results/<name>/convergence.txt`.
@@ -298,6 +304,10 @@ Two things to read carefully:
 - **A run takes too long.** Use fewer `levels`, set the stress `solver` to
   `"iterative"`, untick *Thermal stress* in the window, or use larger `mesh_size`
   values. Each level has roughly 1.75 times the nodes of the one before.
+- **The window seems stuck on Running.** If the clock on the Run button is still
+  counting, the study is still working; the last stress solve of a full study can
+  take 15 minutes or more with no new output. Set *Levels* to 1, or use the
+  `"iterative"` stress solver, for shorter runs.
 - **The window shows old plots.** Plots belong to the run name. Change the name, or
   run again.
 

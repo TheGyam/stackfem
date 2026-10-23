@@ -13,12 +13,15 @@ def run_level(p, level, out):
     folder.mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
 
+    # Each slow step says so before it starts, so a long solve never looks stuck.
+    print(f"level {level}: meshing and checking quality...")
     data = mesh.generate(p, level, msh_path=folder / "mesh.msh")
-    print(f"level {level}: {len(data['nodes'])} nodes")
+    print(f"level {level}: {len(data['nodes']):,} nodes")
     print(quality.table(data["quality"]))
 
     deck = folder / f"{p['name']}_thermal.inp"
     solver.write_deck(p, data, deck)
+    print(f"level {level}: solving the heat flow...")
     data["temperature"] = solver.read_temperatures(solver.run(deck), len(data["nodes"]))
     row = {"level": level, **solver.summarise(p, data),
            "min_sicn": min(r["min_sicn"] for r in data["quality"].values())}
@@ -27,6 +30,9 @@ def run_level(p, level, out):
     if "mechanics" in p:
         deck = folder / f"{p['name']}_stress.inp"
         stress.write_deck(p, data, deck)
+        print(f"level {level}: solving the thermal stress ({p['mechanics'].get('solver', 'direct')} "
+              f"solver). On a fine mesh this is the slowest step and can run for 10 minutes or "
+              f"more with no new output. That is normal; it has not stopped.")
         stress.read(solver.run(deck), data)
         row.update(stress.summarise(p, data))
         print(f"level {level}: largest displacement {row['u_max']:.2f} um, "
@@ -34,12 +40,16 @@ def run_level(p, level, out):
 
     mesh.save(data, folder / "result.npz")
     row["seconds"] = round(time.perf_counter() - start, 1)
-    print()
+    print(f"level {level}: done in {row['seconds']:.0f} s\n")
     return row
 
 
 def run_all(p, out):
-    rows = [run_level(p, level, out) for level in range(p["study"]["levels"])]
+    levels = p["study"]["levels"]
+    rows = []
+    for level in range(levels):
+        print(f"=== level {level} of {levels - 1} ===")
+        rows.append(run_level(p, level, out))
     write_summary(rows, Path(out) / "summary.csv")
     return rows
 
