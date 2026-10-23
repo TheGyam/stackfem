@@ -40,11 +40,11 @@ def test_node_order_matches_calculix(slab_mesh):
         assert np.allclose(nodes[conn[:, 4 + k]], middle)
 
 
-def test_cold_nodes_are_the_bottom_face(slab_mesh):
+def test_bottom_nodes_are_the_bottom_face(slab_mesh):
     _, data = slab_mesh
     z = data["nodes"][:, 2]
-    assert np.allclose(z[data["cold"] - 1], 0)
-    assert len(data["cold"]) == np.isclose(z, 0).sum()
+    assert np.allclose(z[data["bottom"] - 1], 0)
+    assert len(data["bottom"]) == np.isclose(z, 0).sum()
 
 
 def test_quality_report_covers_every_layer(slab_mesh):

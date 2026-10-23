@@ -4,9 +4,7 @@ import csv
 import time
 from pathlib import Path
 
-from . import mesh, quality, solver
-
-COLUMNS = ["level", "nodes", "elements", "min_sicn", "t_max", "r_th", "seconds"]
+from . import mesh, quality, solver, stress
 
 
 def run_level(p, level, out):
@@ -19,17 +17,24 @@ def run_level(p, level, out):
     print(f"level {level}: {len(data['nodes'])} nodes")
     print(quality.table(data["quality"]))
 
-    deck = folder / f"{p['name']}.inp"
+    deck = folder / f"{p['name']}_thermal.inp"
     solver.write_deck(p, data, deck)
-    dat = solver.run(deck)
-    data["temperature"] = solver.read_temperatures(dat, len(data["nodes"]))
-    mesh.save(data, folder / "result.npz")
+    data["temperature"] = solver.read_temperatures(solver.run(deck), len(data["nodes"]))
+    row = {"level": level, **solver.summarise(p, data),
+           "min_sicn": min(r["min_sicn"] for r in data["quality"].values())}
+    print(f"level {level}: max temperature {row['t_max']:.3f} C, R_th {row['r_th']:.4f} K/W")
 
-    row = solver.summarise(p, data)
-    row["level"] = level
-    row["min_sicn"] = min(r["min_sicn"] for r in data["quality"].values())
+    if "mechanics" in p:
+        deck = folder / f"{p['name']}_stress.inp"
+        stress.write_deck(p, data, deck)
+        stress.read(solver.run(deck), data)
+        row.update(stress.summarise(p, data))
+        print(f"level {level}: largest displacement {row['u_max']:.2f} um, "
+              f"die-top bow {row['top_bow']:.3f} um")
+
+    mesh.save(data, folder / "result.npz")
     row["seconds"] = round(time.perf_counter() - start, 1)
-    print(f"level {level}: max temperature {row['t_max']:.3f} C, R_th {row['r_th']:.4f} K/W\n")
+    print()
     return row
 
 
@@ -41,7 +46,7 @@ def run_all(p, out):
 
 def write_summary(rows, path):
     with open(path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
 

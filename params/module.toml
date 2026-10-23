@@ -1,5 +1,6 @@
 # One file describes the whole run: the stack, the mesh, the load and the study.
-# Units: millimetres, watts, degrees C. Conductivity is in W/(m K).
+# Units: millimetres, watts, degrees C. Conductivity is in W/(m K), stiffness in
+# GPa and thermal expansion in ppm/K (millionths per kelvin).
 
 name = "module"
 
@@ -43,18 +44,33 @@ mesh_size = 0.2
 
 [material.copper]
 conductivity = 390.0
+youngs_modulus = 117.0
+poisson = 0.34
+expansion = 17.0
 
 [material.sac305]
 conductivity = 58.0
+youngs_modulus = 51.0
+poisson = 0.36
+expansion = 21.6
 
 [material.aln]
 conductivity = 170.0
+youngs_modulus = 320.0
+poisson = 0.24
+expansion = 4.5
 
 [material.sintered_silver]
 conductivity = 200.0
+youngs_modulus = 20.0
+poisson = 0.37
+expansion = 19.6
 
 [material.sic]
 conductivity = 370.0
+youngs_modulus = 410.0
+poisson = 0.14
+expansion = 4.0
 
 [mesh]
 # How far the mesh takes to grow from a layer's size to the sizes around it.
@@ -75,8 +91,25 @@ max_poor_fraction = 0.02
 # Heat made in the `source` layer, spread evenly through its volume.
 source = "die"
 power = 20.0          # W
-# The bottom of the baseplate is held at this temperature (an ideal cold plate).
-cold_plate = 25.0     # C
+# The bottom of the baseplate is cooled by a coolant at `sink` C. With `film`, the
+# heat crosses a film with that heat transfer coefficient, in W/(m2 K). Leave
+# `film` out to hold the bottom at exactly `sink` (an ideal cold plate).
+sink = 25.0           # C
+film = 10000.0        # W/(m2 K), typical of a liquid cold plate
+
+[mechanics]
+# Thermal stress from the temperatures found above. Delete this section to skip it.
+# Every material then needs youngs_modulus, poisson and expansion.
+# The stack has no stress at `stress_free` C. All parts are linear elastic.
+stress_free = 25.0    # C
+# How the baseplate is held:
+#   "flat": its bottom stays flat (as if clamped to a heat sink) but may slide sideways
+#   "free": only rigid-body motion is stopped, so the whole stack can bow
+support = "flat"
+# "direct" is exact but needs a lot of memory and time on fine meshes; "iterative"
+# is much faster and leaves errors of about 0.01% in the mean stresses and 0.1% in
+# displacements, enough for this study. See ARCHITECTURE.md.
+solver = "iterative"
 
 [study]
 levels = 4

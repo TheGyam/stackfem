@@ -14,9 +14,10 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
 from . import mesh, study  # noqa: E402
+from .stress import element_volumes  # noqa: E402
 from .params import layer_heights  # noqa: E402
 
-INK, MUTED, LINE, BAND = "#1f2328", "#59636e", "#2f6fb5", "#eef1f4"
+INK, MUTED, LINE = "#1f2328", "#59636e", "#2f6fb5"
 
 
 def richardson(h, phi):
@@ -65,32 +66,99 @@ def style(ax):
     ax.title.set_color(INK)
 
 
-def plot_convergence(p, rows, path):
-    h = element_size(p, [r["nodes"] for r in rows])
-    t = [r["t_max"] for r in rows]
-    fit = richardson(h, t) if len(rows) >= 3 else None
+# Categorical colours for the per-layer stress lines, in a fixed order.
+SERIES = ["#2f6fb5", "#d9822b", "#2e9e6a", "#b5459a", "#7d6ac9", "#c9a227", "#5b6770"]
 
-    fig, ax = plt.subplots(figsize=(6.4, 4.2), dpi=150)
-    ax.plot(h, t, "-o", color=LINE, linewidth=2, markersize=6, label="CalculiX")
-    for hi, ti, r in zip(h, t, rows):
-        ax.annotate(f"level {int(r['level'])}", (hi, ti), textcoords="offset points",
-                    xytext=(6, 6), fontsize=8, color=MUTED)
-    if fit:
-        ax.axhline(fit["extrapolated"], color=MUTED, linestyle="--", linewidth=1,
-                   label=f"extrapolated {fit['extrapolated']:.3f} °C")
-        ax.set_title(f"Max die temperature: observed order {fit['order']:.2f}, "
-                     f"GCI {fit['gci']:.2%}", fontsize=10)
-    else:
-        ax.set_title("Max die temperature", fontsize=10)
-    ax.set_xlabel("element size, (volume / nodes)$^{1/3}$  [mm]")
-    ax.set_ylabel("max die temperature  [°C]")
-    ax.set_xlim(left=0)
-    ax.legend(frameon=False, fontsize=8, labelcolor=INK)
-    style(ax)
+
+def tracked(rows):
+    """(column, name, unit) of each converging result in the study. Peak stresses are
+    left out on purpose: they sit on edge singularities and never converge."""
+    out = [("t_max", "max die temperature", "°C")]
+    if "u_max" in rows[0]:
+        out.append(("u_max", "largest displacement", "µm"))
+        out += [(k, f"mean stress, {k[len('vm_mean_'):]}", "MPa") for k in rows[0] if k.startswith("vm_mean_")]
+    return out
+
+
+def fits(p, rows):
+    """Richardson extrapolation of every tracked result, if there are three levels."""
+    if len(rows) < 3:
+        return {}
+    h = element_size(p, [r["nodes"] for r in rows])
+    return {key: richardson(h, [r[key] for r in rows]) for key, _, _ in tracked(rows)}
+
+
+def plot_convergence(p, rows, fitted, path):
+    """One panel per kind of result, all against element size.
+
+    Temperature and displacement are shown as they are. The layer stresses differ
+    by an order of magnitude, so they share a panel as a change from the finest mesh.
+    """
+    h = element_size(p, [r["nodes"] for r in rows])
+    stresses = [(k, n) for k, n, _ in tracked(rows) if k.startswith("vm_mean_")]
+    singles = [t for t in tracked(rows) if not t[0].startswith("vm_mean_")]
+    panels = len(singles) + bool(stresses)
+    fig, axes = plt.subplots(1, panels, figsize=(4.6 * panels, 3.8), dpi=150, squeeze=False)
+
+    for ax, (key, name, unit) in zip(axes[0], singles):
+        values = [r[key] for r in rows]
+        ax.plot(h, values, "-o", color=LINE, linewidth=2, markersize=6)
+        for hi, v, r in zip(h, values, rows):
+            ax.annotate(f"level {int(r['level'])}", (hi, v), textcoords="offset points",
+                        xytext=(6, 6), fontsize=8, color=MUTED)
+        fit = fitted.get(key)
+        if fit:
+            ax.axhline(fit["extrapolated"], color=MUTED, linestyle="--", linewidth=1,
+                       label=f"extrapolated {fit['extrapolated']:.5g} {unit}")
+            ax.legend(frameon=False, fontsize=8, labelcolor=INK)
+            ax.set_title(f"{name.capitalize()}\norder {fit['order']:.2f}, GCI {fit['gci']:.2%}", fontsize=10)
+        else:
+            ax.set_title(name.capitalize(), fontsize=10)
+        ax.set_ylabel(f"{name}  [{unit}]")
+
+    if stresses:
+        ax = axes[0][-1]
+        for (key, name), colour in zip(stresses, SERIES):
+            values = np.array([r[key] for r in rows])
+            ax.plot(h, 100 * (values / values[-1] - 1), "-o", color=colour, linewidth=2,
+                    markersize=5, label=name.split(", ")[1])
+        ax.axhline(0, color=MUTED, linewidth=0.8)
+        ax.set_title("Mean stress per layer", fontsize=10)
+        ax.set_ylabel("change from the finest mesh  [%]")
+        ax.legend(frameon=False, fontsize=8, labelcolor=INK)
+
+    for ax in axes[0]:
+        ax.set_xlabel("element size  [mm]")
+        ax.set_xlim(left=0)
+        style(ax)
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
-    return fit
+
+
+def plot_stress(p, data, path):
+    """Mean and peak von Mises stress in each layer, on the finest mesh."""
+    names = [l["name"] for l in p["layer"]]
+    mean = [np.average(data["von_mises"][n], weights=element_volumes(data["nodes"], data["elements"][n]))
+            for n in names]
+    peak = [data["von_mises_peak"][n].max() for n in names]
+    y = np.arange(len(names))
+
+    fig, ax = plt.subplots(figsize=(6.4, 0.6 * len(names) + 1.4), dpi=150)
+    ax.barh(y, mean, height=0.5, color=LINE, label="mean over the layer")
+    ax.plot(peak, y, "o", color=SERIES[1], markersize=8, label="peak, at an edge (grows with refinement)")
+    for yi, m in zip(y, mean):
+        ax.text(m, yi, f" {m:.1f}", va="center", fontsize=8, color=INK)
+    ax.set_yticks(y, names)
+    ax.invert_yaxis()
+    ax.set_xlabel("von Mises stress  [MPa]")
+    ax.set_title("Thermal stress by layer", fontsize=10)
+    ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="lower right")
+    style(ax)
+    ax.grid(axis="y", visible=False)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
 
 
 # Gmsh's tet10 mid-edge nodes 4..9 sit on these corner pairs.
@@ -178,16 +246,30 @@ def report(p, out):
     rows = study.read_summary(out / "summary.csv")
     finest = mesh.load(out / f"level_{int(rows[-1]['level'])}" / "result.npz")
 
-    fit = plot_convergence(p, rows, out / "convergence.png")
+    fitted = fits(p, rows)
+    plot_convergence(p, rows, fitted, out / "convergence.png")
     plot_profile(p, finest, out / "profile.png")
     plot_top(p, finest, out / "top.png")
+    if "von_mises" in finest:
+        plot_stress(p, finest, out / "stress.png")
 
     lines = [f"{'level':>5}{'nodes':>10}{'h [mm]':>9}{'T max [C]':>11}{'R_th [K/W]':>12}"]
     for r, h in zip(rows, element_size(p, [r["nodes"] for r in rows])):
         lines.append(f"{int(r['level']):>5}{int(r['nodes']):>10}{h:>9.4f}{r['t_max']:>11.3f}{r['r_th']:>12.4f}")
-    if fit:
-        lines.append(f"\nobserved order {fit['order']:.2f}, extrapolated T max "
-                     f"{fit['extrapolated']:.3f} C, GCI on the finest mesh {fit['gci']:.3%}")
+    if "u_max" in rows[0]:
+        names = [l["name"] for l in p["layer"]]
+        lines.append("\nlargest displacement [um] and mean / peak von Mises stress [MPa]")
+        lines.append(f"{'level':>5}{'u max':>9}" + "".join(f"{n:>22}" for n in names))
+        for r in rows:
+            cells = "".join(f"{r[f'vm_mean_{n}']:>12.2f} / {r[f'vm_peak_{n}']:<7.1f}" for n in names)
+            lines.append(f"{int(r['level']):>5}{r['u_max']:>9.3f}{cells}")
+    if fitted:
+        lines.append("\nextrapolated to zero element size:")
+        for key, name, unit in tracked(rows):
+            fit = fitted[key]
+            unit = unit.replace("\u00b0C", "C").replace("\u00b5m", "um")  # plain text for any console
+            lines.append(f"  {name:<30}{fit['extrapolated']:>10.5g} {unit:<4} order {fit['order']:5.2f}, "
+                         f"GCI on the finest mesh {fit['gci']:.3%}")
     text = "\n".join(lines)
-    (out / "convergence.txt").write_text(text + "\n")
+    (out / "convergence.txt").write_text(text + "\n", encoding="utf-8")
     return text

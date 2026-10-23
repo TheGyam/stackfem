@@ -27,11 +27,11 @@ def build(p):
         # Stacked boxes only touch, so each one comes back as exactly one volume.
         volumes[layer["name"]] = piece[0][1]
         gmsh.model.addPhysicalGroup(3, [piece[0][1]], name=layer["name"])
-    gmsh.model.addPhysicalGroup(2, cold_faces(p), name="cold")
+    gmsh.model.addPhysicalGroup(2, bottom_faces(p), name="bottom")
     return volumes
 
 
-def cold_faces(p):
+def bottom_faces(p):
     """Faces at z = 0: the bottom of the baseplate."""
     lx, ly = p["layer"][0]["size"]
     found = gmsh.model.getEntitiesInBoundingBox(

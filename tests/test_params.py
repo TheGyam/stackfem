@@ -22,3 +22,24 @@ def test_bad_files_are_rejected(module, change, message):
     change(p)
     with pytest.raises(ValueError, match=message):
         params.check(p)
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda p: p["mechanics"].update(support="glued"), "flat"),
+    (lambda p: p["material"]["sic"].pop("expansion"), "expansion"),
+    (lambda p: p["material"]["aln"].update(poisson=0.5), "poisson"),
+    (lambda p: p["load"].update(film=0), "film"),
+])
+def test_bad_mechanics_and_cooling_are_rejected(module, change, message):
+    p = copy.deepcopy(module)
+    change(p)
+    with pytest.raises(ValueError, match=message):
+        params.check(p)
+
+
+def test_mechanics_is_optional(module):
+    p = copy.deepcopy(module)
+    del p["mechanics"]
+    for material in p["material"].values():
+        del material["expansion"]
+    params.check(p)

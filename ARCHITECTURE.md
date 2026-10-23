@@ -11,7 +11,9 @@ src/stackfem/
   geometry.py           Build the stack in Gmsh (OpenCASCADE)
   mesh.py               Size fields, meshing, and the mesh as numpy arrays
   quality.py            Element quality checks and the quality table
-  solver.py             CalculiX: write the deck, run ccx, read temperatures
+  solver.py             CalculiX: what every deck shares, running ccx, reading
+                        results, and the heat-flow step
+  stress.py             The thermal stress step
   study.py              Run one level or all of them; the summary CSV
   post.py               Extrapolation, probing the solution, the plots
   cli.py                The `stackfem` command
@@ -23,14 +25,16 @@ results/              Output. Not tracked by git.
 ## The flow
 
 ```
-params.toml → geometry → mesh (size fields) → quality check → CalculiX deck → ccx
-           → temperatures → result.npz per level → summary.csv → plots and table
+params.toml → geometry → mesh (size fields) → quality check
+            → heat-flow deck → ccx → temperatures
+            → stress deck (if [mechanics]) → ccx → displacements and stresses
+            → result.npz per level → summary.csv → plots and table
 ```
 
 Each step hands the next one plain data: a dict of parameters, then a dict of
-numpy arrays (`nodes`, `elements` per layer, `cold` nodes, and later
-`temperature`). Only `geometry.py` and `mesh.py` talk to Gmsh, and only
-`solver.py` knows CalculiX's file formats.
+numpy arrays (`nodes`, `elements` per layer, `bottom` nodes, then `temperature`,
+`displacement` and `von_mises` per layer). Only `geometry.py` and `mesh.py` talk to
+Gmsh, and only `solver.py` and `stress.py` know CalculiX's file formats.
 
 ## The rules
 
@@ -57,8 +61,24 @@ numpy arrays (`nodes`, `elements` per layer, `cold` nodes, and later
   exactly the cube of the ratio. The extrapolation therefore uses the measured
   size, (volume / nodes)^(1/3), and the Celik et al. (2008) method, which allows
   unequal ratios between levels.
-- **Solver.** The deck asks for CalculiX's iterative Cholesky solver. It matches
-  the default direct solver to the printed precision and is several times faster.
-- **Boundary conditions.** The baseplate bottom is held at a fixed temperature
-  (an ideal cold plate). All other faces are insulated. The heat is spread evenly
-  through the source layer's volume.
+- **Solvers.** The heat-flow deck uses CalculiX's iterative Cholesky solver: it
+  matches the direct solver to the printed precision and is several times faster.
+  The stress step is different. There the iterative solver stops early enough to
+  leave stresses of about 0.5% of the thermal stress scale on a stack that should
+  carry none, so the stress step uses the direct solver (spooles) unless the
+  parameter file asks for `solver = "iterative"`. The direct solver needs much more
+  memory on big meshes.
+- **Heat flow boundary conditions.** Heat is spread evenly through the source
+  layer's volume and leaves through the baseplate bottom, either through a film
+  to the coolant (`film`, applied on the element faces found by
+  `solver.bottom_faces`) or held at the coolant temperature. All other faces are
+  insulated.
+- **Stress boundary conditions.** Three bottom nodes stop rigid-body motion and
+  nothing else (`stress.supports`). With `support = "flat"` the whole bottom is
+  also held at z = 0, as if clamped to a heat sink but free to slide. The stack has
+  no stress at `stress_free`; the stress step is one-way, so stress never changes
+  the temperatures.
+- **Peak stress does not converge.** Where a stiff layer ends on a softer one the
+  elastic stress is infinite in theory, so the peak value keeps rising as the
+  mesh is refined. The study tracks volume-averaged stress per layer, which does
+  converge, and reports the peak only to show where stress gathers.

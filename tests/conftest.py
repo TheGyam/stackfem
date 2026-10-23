@@ -19,7 +19,9 @@ def make_slab():
         {"name": "chip", "material": "sic", "size": [2.0, 2.0], "thickness": 0.3, "mesh_size": 0.3},
     ]
     p["load"]["source"] = "chip"
+    p["load"].pop("film", None)  # the bottom is held at the sink temperature
     p["mesh"]["grading"] = 0.3
+    p["mechanics"]["solver"] = "direct"  # small enough to solve exactly
     return params.check(p)
 
 

@@ -75,7 +75,7 @@ def to_arrays(p, volumes):
 
     nodes      (N, 3) coordinates; node id i is row i - 1
     elements   {layer: (M, 10) node ids, in Gmsh's tet10 order}
-    cold       node ids on the bottom of the baseplate
+    bottom     node ids on the bottom of the baseplate
     """
     tags, coords, _ = gmsh.model.mesh.getNodes()
     nodes = np.empty((len(tags), 3))
@@ -86,27 +86,34 @@ def to_arrays(p, volumes):
         _, node_tags = gmsh.model.mesh.getElementsByType(TET10, vol)
         elements[name] = node_tags.astype(int).reshape(-1, 10)
 
-    cold = set()
-    for surface in geometry.cold_faces(p):
+    bottom = set()
+    for surface in geometry.bottom_faces(p):
         tags, _, _ = gmsh.model.mesh.getNodes(2, surface, includeBoundary=True)
-        cold.update(tags.astype(int))
-    return {"nodes": nodes, "elements": elements, "cold": np.array(sorted(cold))}
+        bottom.update(tags.astype(int))
+    return {"nodes": nodes, "elements": elements, "bottom": np.array(sorted(bottom))}
 
 
 def save(data, path):
-    arrays = {"nodes": data["nodes"], "cold": data["cold"]}
-    arrays.update({f"elements/{k}": v for k, v in data["elements"].items()})
-    if "temperature" in data:
-        arrays["temperature"] = data["temperature"]
+    """Save every array in `data`. Per-layer dicts of arrays (elements, von_mises)
+    are stored as "<key>/<layer>". The quality report is left out."""
+    arrays = {}
+    for key, value in data.items():
+        if key == "quality":
+            continue
+        if isinstance(value, dict):
+            arrays.update({f"{key}/{layer}": v for layer, v in value.items()})
+        else:
+            arrays[key] = value
     np.savez_compressed(path, **arrays)
 
 
 def load(path):
+    data = {}
     with np.load(path) as f:
-        data = {"elements": {}}
-        for key in f.files:
-            if key.startswith("elements/"):
-                data["elements"][key.split("/", 1)[1]] = f[key]
+        for key in f.files:  # stored in insertion order, so layers keep stack order
+            if "/" in key:
+                group, layer = key.split("/", 1)
+                data.setdefault(group, {})[layer] = f[key]
             else:
                 data[key] = f[key]
     return data
