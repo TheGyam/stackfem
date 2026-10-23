@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stackfem"
+version = "0.1.0"
+description = "Mesh and solve the heat flow through a layered power module stack with Gmsh and CalculiX."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["gmsh>=4.11", "numpy>=1.24", "matplotlib>=3.7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+stackfem = "stackfem.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

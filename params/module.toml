@@ -1,0 +1,82 @@
+# One file describes the whole run: the stack, the mesh, the load and the study.
+# Units: millimetres, watts, degrees C. Conductivity is in W/(m K).
+
+name = "module"
+
+# Layers from the bottom up. Each one is a box centred on the z axis.
+# `mesh_size` is the element size inside the layer at level 0. Thin layers get a
+# small size, and the mesh grows back to the coarser sizes around them.
+[[layer]]
+name = "baseplate"
+material = "copper"
+size = [14.0, 14.0]
+thickness = 2.0
+mesh_size = 1.2
+
+[[layer]]
+name = "solder"
+material = "sac305"
+size = [9.0, 9.0]
+thickness = 0.10
+mesh_size = 0.2
+
+[[layer]]
+name = "substrate"
+material = "aln"
+size = [9.0, 9.0]
+thickness = 0.63
+mesh_size = 0.5
+
+[[layer]]
+name = "die_attach"
+material = "sintered_silver"
+size = [3.0, 3.0]
+thickness = 0.05
+mesh_size = 0.1
+
+[[layer]]
+name = "die"
+material = "sic"
+size = [3.0, 3.0]
+thickness = 0.25
+mesh_size = 0.2
+
+[material.copper]
+conductivity = 390.0
+
+[material.sac305]
+conductivity = 58.0
+
+[material.aln]
+conductivity = 170.0
+
+[material.sintered_silver]
+conductivity = 200.0
+
+[material.sic]
+conductivity = 370.0
+
+[mesh]
+# How far the mesh takes to grow from a layer's size to the sizes around it.
+grading = 1.0
+# Each refinement level divides every size by this ratio.
+refinement_ratio = 1.3
+
+[quality]
+# Checked on every mesh. The run stops if any element's scaled Jacobian (SICN)
+# is below `min_sicn`, or if more than `max_poor_fraction` of the elements are
+# below `poor_sicn`. SICN is 1 for a perfect tetrahedron and 0 or less for a
+# flat or inverted one.
+min_sicn = 0.05
+poor_sicn = 0.2
+max_poor_fraction = 0.02
+
+[load]
+# Heat made in the `source` layer, spread evenly through its volume.
+source = "die"
+power = 20.0          # W
+# The bottom of the baseplate is held at this temperature (an ideal cold plate).
+cold_plate = 25.0     # C
+
+[study]
+levels = 4
